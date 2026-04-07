@@ -1,2 +1,0 @@
-# FinancialLiteracy-CompoundInterest
-Financial Education
