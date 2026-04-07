@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compound Interest Snowball</title>
+<meta name="description" content="Interactive compound interest calculator — watch your money snowball downhill with monthly contributions.">
+<meta property="og:title" content="Compound Interest Snowball">
+<meta property="og:description" content="Interactive compound interest calculator with animated snowball visualization.">
+<meta property="og:type" content="website">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f2; color: #1a1a1a; padding: 2rem 1rem; }
+  .container { max-width: 700px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 500; margin-bottom: 0.2rem; }
+  .subtitle { font-size: 14px; color: #666; margin-bottom: 1.5rem; }
+  .controls { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 1.2rem; padding: 1rem; background: #ebebeb; border-radius: 12px; }
+  .ctrl { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 110px; }
+  .ctrl label { font-size: 11px; color: #666; }
+  .ctrl span { font-size: 12px; font-weight: 500; color: #1a1a1a; }
+  input[type=range] { width: 100%; accent-color: #1D9E75; cursor: pointer; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 1.2rem; }
+  .stat { background: #ebebeb; border-radius: 8px; padding: 10px 12px; }
+  .stat .lbl { font-size: 11px; color: #666; margin-bottom: 3px; }
+  .stat .val { font-size: 17px; font-weight: 500; }
+  .hill-wrap { border-radius: 12px; overflow: hidden; margin-bottom: 1.2rem; background: linear-gradient(180deg, #b8d4f0 0%, #d4e9f8 40%, #e8f4e8 70%, #c8e4b0 100%); height: 190px; }
+  .hill-wrap canvas { display: block; width: 100%; height: 100%; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+  .leg-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #666; }
+  .leg-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .chart-wrap { background: #fff; border-radius: 12px; border: 0.5px solid #ddd; padding: 1rem; margin-bottom: 2rem; }
+  footer { font-size: 11px; color: #aaa; text-align: center; padding-top: 1rem; }
+
+  @media (max-width: 480px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    h1 { font-size: 19px; }
+  }
+
+  @media (prefers-color-scheme: dark) {
+    body { background: #1a1a1a; color: #eee; }
+    .controls, .stat { background: #2a2a2a; }
+    .ctrl label, .stat .lbl, .subtitle, .leg-item { color: #aaa; }
+    .ctrl span, .stat .val { color: #eee; }
+    .chart-wrap { background: #222; border-color: #333; }
+    footer { color: #555; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Compound Interest Snowball</h1>
+  <p class="subtitle">Watch your money grow — slowly at first, then dramatically faster. Adjust the sliders to see your future wealth.</p>
+
+  <div class="controls">
+    <div class="ctrl">
+      <label>Initial investment</label>
+      <input type="range" id="principal" min="0" max="50000" step="1000" value="5000">
+      <span id="principalVal">$5,000</span>
+    </div>
+    <div class="ctrl">
+      <label>Monthly contribution</label>
+      <input type="range" id="monthly" min="0" max="2000" step="50" value="200">
+      <span id="monthlyVal">$200/mo</span>
+    </div>
+    <div class="ctrl">
+      <label>Annual rate</label>
+      <input type="range" id="rate" min="1" max="20" step="0.5" value="8">
+      <span id="rateVal">8%</span>
+    </div>
+    <div class="ctrl">
+      <label>Years</label>
+      <input type="range" id="years" min="5" max="40" step="1" value="20">
+      <span id="yearsVal">20 yrs</span>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="lbl">Initial</div><div class="val" id="s1">$5,000</div></div>
+    <div class="stat"><div class="lbl">Total contributed</div><div class="val" id="s2">$53,000</div></div>
+    <div class="stat"><div class="lbl">Interest earned</div><div class="val" id="s3" style="color:#1D9E75;">$—</div></div>
+    <div class="stat"><div class="lbl">Final value</div><div class="val" id="s4" style="color:#1D9E75;">$—</div></div>
+  </div>
+
+  <div class="hill-wrap">
+    <canvas id="hillCanvas"></canvas>
+  </div>
+
+  <div class="legend">
+    <div class="leg-item"><div class="leg-dot" style="background:#1D9E75;"></div>With contributions</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#378ADD;"></div>No contributions</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#EF9F27;"></div>Total money in</div>
+  </div>
+
+  <div class="chart-wrap">
+    <canvas id="chartCanvas" height="200"></canvas>
+  </div>
+
+  <footer>Results are for illustrative purposes only and do not constitute financial advice.</footer>
+</div>
+
+<script>
+  function getVals() {
+    return {
+      P: parseFloat(document.getElementById('principal').value),
+      m: parseFloat(document.getElementById('monthly').value),
+      r: parseFloat(document.getElementById('rate').value) / 100,
+      n: parseInt(document.getElementById('years').value)
+    };
+  }
+
+  function calcData(P, m, r, n) {
+    const monthlyRate = r / 12;
+    let withContrib = [], noContrib = [], totalIn = [];
+    let balWith = P, balNo = P, invested = P;
+    withContrib.push(P); noContrib.push(P); totalIn.push(P);
+    for (let yr = 1; yr <= n; yr++) {
+      for (let mo = 0; mo < 12; mo++) {
+        balWith = balWith * (1 + monthlyRate) + m;
+        balNo = balNo * (1 + monthlyRate);
+        invested += m;
+      }
+      withContrib.push(+balWith.toFixed(2));
+      noContrib.push(+balNo.toFixed(2));
+      totalIn.push(+invested.toFixed(2));
+    }
+    return { withContrib, noContrib, totalIn };
+  }
+
+  function fmt(v) { return '$' + Math.round(v).toLocaleString(); }
+  function fmtk(v) { return v >= 1000 ? '$' + (v / 1000).toFixed(0) + 'k' : '$' + Math.round(v); }
+  const isDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+  let chart;
+  function buildChart(data, n) {
+    const ctx = document.getElementById('chartCanvas').getContext('2d');
+    const labels = Array.from({length: n + 1}, (_, i) => i % 5 === 0 ? 'Yr ' + i : '');
+    const tc = isDark() ? '#aaa' : '#888';
+    const gc = isDark() ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)';
+    if (chart) chart.destroy();
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: 'With contributions', data: data.withContrib, borderColor: '#1D9E75', backgroundColor: 'rgba(29,158,117,0.12)', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2 },
+          { label: 'No contributions', data: data.noContrib, borderColor: '#378ADD', backgroundColor: 'rgba(55,138,221,0.08)', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 1.5 },
+          { label: 'Total money in', data: data.totalIn, borderColor: '#EF9F27', backgroundColor: 'transparent', fill: false, tension: 0, pointRadius: 0, borderWidth: 1.5, borderDash: [5, 3] }
+        ]
+      },
+      options: {
+        responsive: true,
+        animation: { duration: 300 },
+        plugins: {
+          legend: { labels: { color: tc, font: { size: 12 }, boxWidth: 12 } },
+          tooltip: { callbacks: { label: c => ' ' + fmt(c.parsed.y) } }
+        },
+        scales: {
+          x: { ticks: { color: tc, font: { size: 11 } }, grid: { color: gc } },
+          y: { ticks: { color: tc, font: { size: 11 }, callback: v => fmtk(v) }, grid: { color: gc } }
+        }
+      }
+    });
+  }
+
+  let ballT = 0;
+
+  function drawHill() {
+    const canvas = document.getElementById('hillCanvas');
+    const wrap = canvas.parentElement;
+    const W = wrap.clientWidth || 680;
+    const H = 190;
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+
+    const hillPath = new Path2D();
+    hillPath.moveTo(0, H * 0.18);
+    hillPath.bezierCurveTo(W * 0.2, H * 0.05, W * 0.38, H * 0.32, W * 0.52, H * 0.56);
+    hillPath.bezierCurveTo(W * 0.66, H * 0.8, W * 0.82, H * 0.88, W, H * 0.93);
+    hillPath.lineTo(W, H); hillPath.lineTo(0, H); hillPath.closePath();
+    ctx.fillStyle = '#6db86b'; ctx.fill(hillPath);
+    ctx.strokeStyle = '#4a9c47'; ctx.lineWidth = 1.5; ctx.stroke(hillPath);
+
+    ctx.beginPath();
+    ctx.moveTo(0, H * 0.18);
+    ctx.bezierCurveTo(W * 0.06, H * 0.07, W * 0.13, H * 0.04, W * 0.23, H * 0.13);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineTo(0, H * 0.18); ctx.fill();
+
+    const t = ballT;
+    function ballPos(t) {
+      const bx = 3*(1-t)*(1-t)*t*(W*0.22) + 3*(1-t)*t*t*(W*0.62) + t*t*t*W;
+      const by = 3*(1-t)*(1-t)*t*(H*0.1) + 3*(1-t)*t*t*(H*0.52) + t*t*t*(H*0.93);
+      return { x: bx, y: by };
+    }
+
+    const {P, m, r, n} = getVals();
+    const data = calcData(P, m, r, n);
+    const finalWith = data.withContrib[n];
+    const curWith = data.withContrib[Math.round(t * n)] || P;
+    const curNo = data.noContrib[Math.round(t * n)] || P;
+
+    const minR = 8, maxR = 32;
+    const ballR = minR + (maxR - minR) * ((curWith - P) / Math.max(finalWith - P, 1));
+    const ballR2 = minR + (maxR - minR) * ((curNo - P) / Math.max(finalWith - P, 1));
+
+    const p = ballPos(t);
+    const p2 = ballPos(Math.max(0, t - 0.08));
+
+    [
+      { pos: p2, r: ballR2, fill: '#85B7EB', stroke: '#378ADD', val: curNo, tc: '#042C53' },
+      { pos: p,  r: ballR,  fill: '#ffffff', stroke: '#ccd',    val: curWith, tc: '#185FA5' }
+    ].forEach(b => {
+      ctx.save();
+      ctx.beginPath();
+      ctx.ellipse(b.pos.x, b.pos.y + b.r * 0.85, b.r * 0.8, b.r * 0.18, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.1)'; ctx.fill(); ctx.restore();
+
+      ctx.beginPath();
+      ctx.arc(b.pos.x, b.pos.y - b.r * 0.25, b.r, 0, Math.PI * 2);
+      ctx.fillStyle = b.fill; ctx.fill();
+      ctx.strokeStyle = b.stroke; ctx.lineWidth = 1; ctx.stroke();
+
+      if (b.r > 14) {
+        ctx.fillStyle = b.tc;
+        ctx.font = '500 ' + (b.r > 22 ? 10 : 9) + 'px sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(fmt(b.val), b.pos.x, b.pos.y - b.r * 0.25);
+      }
+
+      for (let i = 1; i <= 4; i++) {
+        const tp = Math.max(0, t - i * 0.035);
+        const pp = ballPos(tp);
+        const tr = Math.max(2, b.r * (1 - i * 0.2));
+        ctx.beginPath();
+        ctx.arc(pp.x, pp.y - tr * 0.25, tr, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,' + (0.35 - i * 0.07) + ')'; ctx.fill();
+      }
+    });
+
+    const curYear = Math.round(t * n);
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.font = '11px sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+    ctx.fillText('Year ' + curYear, W - 10, 8);
+
+    if (m > 0) {
+      const coinX = p.x + ballR * 1.3;
+      const coinY = p.y - ballR * 1.2;
+      ctx.beginPath();
+      ctx.arc(coinX, coinY, 7, 0, Math.PI * 2);
+      ctx.fillStyle = '#EF9F27'; ctx.fill();
+      ctx.fillStyle = '#633806';
+      ctx.font = '500 8px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('+$', coinX, coinY);
+    }
+  }
+
+  function animate() {
+    ballT += 0.0025;
+    if (ballT > 1) ballT = 0;
+    drawHill();
+    requestAnimationFrame(animate);
+  }
+
+  function update() {
+    const {P, m, r, n} = getVals();
+    document.getElementById('principalVal').textContent = '$' + P.toLocaleString();
+    document.getElementById('monthlyVal').textContent = '$' + m + '/mo';
+    document.getElementById('rateVal').textContent = (r * 100) + '%';
+    document.getElementById('yearsVal').textContent = n + ' yrs';
+
+    const data = calcData(P, m, r, n);
+    const finalWith = data.withContrib[n];
+    const totalContrib = P + m * 12 * n;
+    const interest = finalWith - totalContrib;
+
+    document.getElementById('s1').textContent = fmt(P);
+    document.getElementById('s2').textContent = fmt(totalContrib);
+    document.getElementById('s3').textContent = fmt(Math.max(0, interest));
+    document.getElementById('s4').textContent = fmt(finalWith);
+
+    buildChart(data, n);
+  }
+
+  ['principal', 'monthly', 'rate', 'years'].forEach(id => {
+    document.getElementById(id).addEventListener('input', update);
+  });
+
+  update();
+  drawHill();
+  animate();
+  window.addEventListener('resize', drawHill);
+</script>
+</body>
+</html>
